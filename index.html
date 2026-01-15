@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acceso - Sistema de Citas</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+  <style>
+    body { font-family: Poppins, sans-serif; background:#0f172a; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0 }
+    .card{background:#0b1220;padding:28px;border-radius:12px;max-width:420px;width:100%;box-shadow:0 8px 24px rgba(2,6,23,.8)}
+    input,button{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #334155;background:#0b1220;color:#fff}
+    input::placeholder{color:#94a3b8}
+    .muted{color:#94a3b8;font-size:13px}
+    .gap{height:12px}
+    .actions{display:flex;gap:8px}
+    .actions button{flex:1}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin:0 0 8px 0">🔐 Acceso al Sistema</h2>
+    <p class="muted" id="subtitle">Ingrese sus credenciales para continuar.</p>
+
+    <div id="login-view">
+      <div class="gap"></div>
+      <input id="login-username" placeholder="Usuario" autocomplete="username">
+      <div class="gap"></div>
+      <input id="login-password" type="password" placeholder="Contraseña" autocomplete="current-password">
+      <div class="gap"></div>
+      <button id="login-btn">Entrar</button>
+      <div class="gap"></div>
+      <p id="login-error" class="muted hidden"></p>
+    </div>
+
+    <div id="first-user-view" class="hidden">
+      <p class="muted">No se encontraron usuarios. Cree la primera cuenta (Administrador).</p>
+      <div class="gap"></div>
+      <input id="first-username" placeholder="Usuario (ej. admin)">
+      <div class="gap"></div>
+      <input id="first-password" type="password" placeholder="Contraseña">
+      <div class="gap"></div>
+      <input id="first-password-confirm" type="password" placeholder="Confirmar Contraseña">
+      <div class="gap"></div>
+      <button id="create-first-btn">Crear y entrar</button>
+      <div class="gap"></div>
+      <p id="first-error" class="muted hidden"></p>
+    </div>
+
+    <div id="register-view" class="hidden">
+      <p class="muted">Solicita tu registro. El administrador debe aprobar tu cuenta antes de poder ingresar.</p>
+      <div class="gap"></div>
+      <input id="register-username" placeholder="Usuario">
+      <div class="gap"></div>
+      <input id="register-password" type="password" placeholder="Contraseña">
+      <div class="gap"></div>
+      <input id="register-password-confirm" type="password" placeholder="Confirmar Contraseña">
+      <div class="gap"></div>
+      <button id="register-btn">Solicitar registro</button>
+      <div class="gap"></div>
+      <p id="register-error" class="muted hidden"></p>
+    </div>
+
+    <div class="gap"></div>
+    <p class="muted" style="font-size:12px">Si ya tienes una cuenta, usa el formulario superior.</p>
+    <button id="show-register-btn" style="width:100%;background:#334155;color:#fff;border:none;padding:10px 0;border-radius:8px;margin-top:8px">Registrar usuario</button>
+  </div>
+
+<script>
+const USERS_KEY = 'citas_publicas_users_v1';
+
+function loadUsers(){ try{ const raw = localStorage.getItem(USERS_KEY); return raw ? JSON.parse(raw) : []; }catch(e){return []} }
+function saveUsers(u){ localStorage.setItem(USERS_KEY, JSON.stringify(u)); }
+
+async function hashPassword(password){
+  return new Promise((resolve,reject)=>{
+    if (typeof bcrypt === 'undefined') return resolve(password);
+    bcrypt.hash(password,10,(err,hash)=>{ if(err) return reject(err); resolve(hash); });
+  });
+}
+
+async function comparePassword(password, stored){
+  return new Promise((resolve)=>{
+    if (typeof bcrypt === 'undefined') return resolve(password === stored);
+    // if stored looks like bcrypt hash (starts with $2), use compare
+    if (typeof stored === 'string' && stored.startsWith('$2')){
+      bcrypt.compare(password, stored, (err,res)=>{ resolve(!!res); });
+    } else {
+      // fallback to plain comparison
+      resolve(password === stored);
+    }
+  });
+}
+
+function showLoginView(){ document.getElementById('login-view').classList.remove('hidden'); document.getElementById('first-user-view').classList.add('hidden'); document.getElementById('register-view').classList.add('hidden'); document.getElementById('subtitle').textContent='Ingrese sus credenciales para continuar.'; }
+function showFirstUserView(){ document.getElementById('login-view').classList.add('hidden'); document.getElementById('first-user-view').classList.remove('hidden'); document.getElementById('register-view').classList.add('hidden'); document.getElementById('subtitle').textContent='Configura la primera cuenta administrativa.'; }
+function showRegisterView(){ document.getElementById('login-view').classList.add('hidden'); document.getElementById('first-user-view').classList.add('hidden'); document.getElementById('register-view').classList.remove('hidden'); document.getElementById('subtitle').textContent='Registro de usuario.'; }
+
+async function init(){
+  const users = loadUsers();
+  if (!users || users.length === 0) { showFirstUserView(); } else { showLoginView(); }
+}
+
+document.getElementById('login-btn').addEventListener('click', async ()=>{
+  const u = document.getElementById('login-username').value.trim();
+  const p = document.getElementById('login-password').value || '';
+  const err = document.getElementById('login-error'); err.classList.add('hidden'); err.textContent='';
+  if (!u || !p){ err.textContent='Ingrese usuario y contraseña'; err.classList.remove('hidden'); return; }
+  const users = loadUsers();
+  const user = users.find(x=>x.username===u);
+  if (!user){ err.textContent='Usuario o contraseña incorrectos'; err.classList.remove('hidden'); return; }
+  const ok = await comparePassword(p, user.password || '');
+  if (!ok){ err.textContent='Usuario o contraseña incorrectos'; err.classList.remove('hidden'); return; }
+  // success
+  sessionStorage.setItem('citas_current_user', JSON.stringify(user));
+  window.location.href = 'citas.html';
+});
+
+document.getElementById('create-first-btn').addEventListener('click', async ()=>{
+  const u = document.getElementById('first-username').value.trim();
+  const p = document.getElementById('first-password').value || '';
+  const pc = document.getElementById('first-password-confirm').value || '';
+  const err = document.getElementById('first-error'); err.classList.add('hidden'); err.textContent='';
+  if (!u) { err.textContent='Ingrese un nombre de usuario'; err.classList.remove('hidden'); return; }
+  if (!p){ err.textContent='Ingrese una contraseña'; err.classList.remove('hidden'); return; }
+  if (p !== pc){ err.textContent='Las contraseñas no coinciden'; err.classList.remove('hidden'); return; }
+  const users = loadUsers();
+  if (users.find(x=>x.username===u)){ err.textContent='El usuario ya existe'; err.classList.remove('hidden'); return; }
+  try{
+    const h = await hashPassword(p);
+    const admin = { username: u, password: h, role: 'admin', permissions: ['*'] };
+    users.push(admin); saveUsers(users);
+    sessionStorage.setItem('citas_current_user', JSON.stringify(admin));
+    window.location.href = 'citas.html';
+  }catch(e){ err.textContent='Error al crear usuario'; err.classList.remove('hidden'); }
+});
+
+document.getElementById('show-register-btn').addEventListener('click', ()=>{
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('register-view').classList.remove('hidden');
+  document.getElementById('first-user-view').classList.add('hidden');
+  document.getElementById('subtitle').textContent = 'Solicita tu registro. El administrador debe aprobar tu cuenta.';
+});
+
+document.getElementById('register-btn').addEventListener('click', async ()=>{
+  const u = document.getElementById('register-username').value.trim();
+  const p = document.getElementById('register-password').value || '';
+  const pc = document.getElementById('register-password-confirm').value || '';
+  const err = document.getElementById('register-error'); err.classList.add('hidden'); err.textContent='';
+  if (!u) { err.textContent='Ingrese un nombre de usuario'; err.classList.remove('hidden'); return; }
+  if (!p){ err.textContent='Ingrese una contraseña'; err.classList.remove('hidden'); return; }
+  if (p !== pc){ err.textContent='Las contraseñas no coinciden'; err.classList.remove('hidden'); return; }
+  const users = loadUsers();
+  if (users.find(x=>x.username===u)){
+    err.textContent='El usuario ya existe'; err.classList.remove('hidden'); return;
+  }
+  // Guardar solicitud como pendiente
+  const pending = localStorage.getItem('citas_pending_users_v1');
+  let pendingList = pending ? JSON.parse(pending) : [];
+  if (pendingList.find(x=>x.username===u)){
+    err.textContent='Ya existe una solicitud pendiente para este usuario'; err.classList.remove('hidden'); return;
+  }
+  try{
+    const h = await hashPassword(p);
+    pendingList.push({ username: u, password: h, status: 'pendiente', permissions: [] });
+    localStorage.setItem('citas_pending_users_v1', JSON.stringify(pendingList));
+    err.textContent='Solicitud enviada. El administrador debe aprobar tu cuenta.';
+    err.classList.remove('hidden');
+    setTimeout(()=>{
+      document.getElementById('register-view').classList.add('hidden');
+      document.getElementById('login-view').classList.remove('hidden');
+      document.getElementById('subtitle').textContent='Ingrese sus credenciales para continuar.';
+    }, 2000);
+  }catch(e){ err.textContent='Error al registrar usuario'; err.classList.remove('hidden'); }
+});
+
+// allow Enter key to submit
+['login-username','login-password'].forEach(id=>{ document.getElementById(id).addEventListener('keypress', (e)=>{ if (e.key==='Enter') document.getElementById('login-btn').click(); }); });
+['first-username','first-password','first-password-confirm'].forEach(id=>{ document.getElementById(id).addEventListener('keypress', (e)=>{ if (e.key==='Enter') document.getElementById('create-first-btn').click(); }); });
+['register-username','register-password','register-password-confirm'].forEach(id=>{ document.getElementById(id).addEventListener('keypress', (e)=>{ if (e.key==='Enter') document.getElementById('register-btn').click(); }); });
+
+init();
+</script>
+</body>
+</html>
